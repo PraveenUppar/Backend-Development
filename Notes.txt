@@ -1,0 +1,38 @@
+Backend Revision - Key Concepts
+================================
+
+This folder assumes Node.js basics, npm, core modules, Express basics, HTTP
+servers, middleware, routing, REST API design, env config, MongoDB/Mongoose
+basics, and SQL/Postgres basics are already covered (in other folders). This
+is the NEXT layer: the stuff that turns a basic Express app into a real,
+production-shaped backend.
+
+Backend Learning Path:
+1. Request validation with Zod - schema-based validation for body/query/params
+2. Error handling - centralized error middleware, custom error classes
+3. File uploads - multer, serving files
+4. Database CRUD with MongoDB/Mongoose - models, schemas, relationships
+5. Database CRUD with raw SQL (Postgres) - no ORM, just the pg driver
+6. Database transactions - Mongoose sessions + SQL transactions
+7. Authentication - bcrypt, JWT, sessions vs tokens
+8. Authorization & roles - role-based middleware
+9. Pagination, filtering, sorting, search - list-endpoint patterns
+10. Caching - Redis, cache invalidation
+11. Background jobs - node-cron, queues (BullMQ)
+12. Payment integration - Stripe payment intents
+13. Webhooks - receiving and verifying async events
+14. WebSockets - Socket.io basics, rooms
+15. Testing APIs - Jest + Supertest
+16. Logging & debugging - console patterns, morgan, monitoring mindset
+17. Prisma ORM - schema-first models, migrations, type-safe queries (an alternative to raw SQL (05) once you want type safety and less boilerplate on a relational DB)
+
+Response shape convention used across all files here:
+Success: { success: true, data: <...> }
+Error:   { success: false, message: "<...>" }
+
+Env vars used across these files (create a .env in whichever folder you run):
+PORT, MONGO_URI, DATABASE_URL, JWT_SECRET, JWT_EXPIRES_IN, REDIS_URL,
+STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
+
+DATABASE_URL for Prisma (topic 17) points at Postgres, same as topic 05:
+postgresql://postgres:postgres@localhost:5432/postgres

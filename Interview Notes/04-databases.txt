@@ -1,0 +1,78 @@
+Databases
+==========
+
+Q1: Describe how you would implement full-text search in a database.
+-------------------------------------------------------------------------
+
+Then give the real options, in order of complexity:
+1. Native DB full-text search:
+   - Postgres: tsvector/tsquery + a GIN index. 
+   - MongoDB: a text index
+2. A dedicated search engine (Elasticsearch/OpenSearch/Meilisearch/Algolia)
+   when you need typo-tolerance, faceted search, or search across
+   millions of documents fast. The trade-off: another service to run and
+   keep in sync with your primary database usually via events/a queue 
+
+
+Q2: What strategies would you use to manage database connections in a high-load scenario?
+--------------------------------------------------------------------------------------------
+Core idea: opening a new TCP connection (plus auth handshake) per request
+is expensive and doesn't scale - use CONNECTION POOLING instead. keeps a set of
+already-open connections and hands them out to requests, returning them
+to the pool when done instead of closing them.
+
+Then talk about what actually needs tuning under load:
+- Pool size: too small and requests queue waiting for a free connection;
+  too large and you can exceed the DATABASE's own max_connections limit,
+  or waste memory. Size it based on (number of app instances) x
+  (pool size per instance) <= DB's connection limit, with headroom.
+- Always release/return connections, even on error - the
+  `client.release()` in a `finally` block in 06-database-transactions.js
+  is exactly this; forgetting it under load leaks the pool empty and
+  every request starts timing out.
+- For very high scale, add a connection pooler IN FRONT of the database
+  itself (PgBouncer for Postgres) so many app instances can share a
+  smaller number of actual DB connections.
+- Read replicas: route read-heavy queries (product listings, reports) to
+  replica databases, keep writes on the primary - reduces load on the
+  single writable instance.
+- Timeouts: set query and connection-acquisition timeouts so one slow
+  query doesn't hold a connection (and block others) indefinitely.
+
+Q4: SQL vs NoSQL - how do you choose?
+-------------------------------------------
+Frame it as "what shape is the data, and how much does it change" rather
+than "NoSQL is faster" (a common wrong reflex). 
+
+SQL/relational (Postgres)
+fits well-defined, relational data where you want strong consistency,
+joins across normalized tables, and transactions across many tables -
+
+NoSQL/document (MongoDB) fits data that's naturally nested/flexible
+(a blog post with embedded comments, a product with a variable set of
+attributes per category) and where you're fine denormalizing for read
+speed.
+
+Also mention: it's not
+all-or-nothing in a real system - it's common to use Postgres for the
+core transactional data and Redis/Mongo for other pieces (sessions,
+logs, search) side by side.
+
+Q5: What's the N+1 query problem and how do you avoid it?
+----------------------------------------------------------------
+It happens when you fetch a list of N records, then loop over them
+making ONE ADDITIONAL query per record to get related data 
+
+Concrete example: fetching 20 blog posts, then looping and querying
+`SELECT * FROM users WHERE id = ?` once per post to get each author -
+21 queries where 2 would do.
+
+Fix in MongoDB/Mongoose: `.populate()` - Mongoose
+batches this into one extra query for all needed authors, not one per
+post. 
+
+Fix in SQL: a JOIN  fetches everything in a single query. The
+general principle to state: fetch relations in BULK, not in a loop -
+whether that's a JOIN, a populate/include, or a single
+`WHERE id IN (...)` query to batch-load related records you collected
+while iterating.

@@ -1,0 +1,73 @@
+// Blog Platform schema
+//
+// This is meant to be migrated in the multi-step way described in
+// ../../Notes.txt, not all at once - if you're following along:
+//   1. npx prisma migrate dev --name init     (User, Post, Tag, PostTag)
+//   2. (imagine later) npx prisma migrate dev --name add-comments   (Comment)
+// For this project both are already written into one schema below so you
+// only need `npx prisma migrate dev --name init` once to get a working DB -
+// but in a real project these would land as separate migrations over time,
+// exactly like Notes.txt describes.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id       Int       @id @default(autoincrement())
+  name     String
+  email    String    @unique
+  posts    Post[]
+  comments Comment[]
+}
+
+model Post {
+  id        Int       @id @default(autoincrement())
+  title     String
+  body      String
+  published Boolean   @default(false)
+  createdAt DateTime  @default(now())
+
+  authorId  Int
+  author    User      @relation(fields: [authorId], references: [id])
+
+  tags      PostTag[]
+  comments  Comment[]
+}
+
+model Tag {
+  id    Int       @id @default(autoincrement())
+  name  String    @unique
+  posts PostTag[]
+}
+
+// Explicit many-to-many join model instead of an implicit Post<->Tag
+// relation, specifically so we have somewhere to put `taggedAt` - see
+// ../../Notes.txt for why explicit was chosen here over implicit.
+model PostTag {
+  postId   Int
+  tagId    Int
+  taggedAt DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id])
+  tag  Tag  @relation(fields: [tagId], references: [id])
+
+  @@id([postId, tagId]) // composite primary key - one row per (post, tag) pair
+}
+
+model Comment {
+  id        Int      @id @default(autoincrement())
+  text      String
+  createdAt DateTime @default(now())
+
+  postId    Int
+  post      Post     @relation(fields: [postId], references: [id])
+
+  authorId  Int
+  author    User     @relation(fields: [authorId], references: [id])
+}

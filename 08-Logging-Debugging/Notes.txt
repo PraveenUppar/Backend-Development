@@ -1,0 +1,71 @@
+Topic 8: Logging & Debugging - Key Concepts
+=============================================
+
+This assumes ..\16-logging-and-debugging.js is already covered - morgan
+for HTTP request logs, a hand-rolled `logger` object with info/warn/error
+that prints JSON, a request counter tagging log lines with a requestId,
+and a debugging checklist. Fine for learning the IDEA of
+structured/leveled logs, but nobody ships the hand-rolled object to
+production. This folder is the gap between "an object that mimics a
+logger" and an actual logging library (Pino).
+
+Sub-topics:
+01-why-pino                    - why a real library beats the hand-rolled
+                                  object, and why Pino specifically over
+                                  Winston for a typical Express API
+02-pino-core-api-redaction     - the object-first logging API, runtime
+                                  log levels, and redacting sensitive
+                                  fields centrally instead of per call site
+03-async-local-storage-correlation - tagging every log line for one
+                                  request with the same requestId, several
+                                  function calls deep, with zero parameters
+                                  passed
+
+Why each matters (the 30-second version):
+  - Why Pino       - the hand-rolled logger has real limitations that show
+                     up under load or at 3am on call: no runtime-
+                     configurable level (can't quiet "info" spam without a
+                     redeploy), no redaction (a logged req.body with a
+                     password field leaks it into your log aggregator
+                     forever), no performance story (JSON.stringify +
+                     console.log on every call adds up), no pretty output
+                     for local dev without building it yourself. Pino is
+                     JSON-first and near-zero-overhead by design; Winston
+                     is more batteries-included but does more synchronous
+                     formatting work per call.
+  - Pino core API  - object first, message second
+                     (logger.info({ userId: 42 }, "user logged in")) -
+                     the opposite of console.log's order, and deliberate:
+                     the object merges into the JSON line as top-level
+                     fields, so your log aggregator can QUERY on userId:42
+                     instead of grepping message strings. Levels
+                     (trace/debug/info/warn/error/fatal) let Pino skip
+                     serialization entirely for calls below the configured
+                     level - a cheap no-op, not just suppressed output.
+                     Redaction runs centrally in the logger config, so no
+                     call site has to remember to scrub a field itself.
+  - AsyncLocalStorage
+    correlation    - every log line produced while handling ONE request,
+                     no matter how deep the call stack, should carry that
+                     request's id. Threading requestId through every
+                     function signature down the chain works but is
+                     miserable and one missed spot breaks correlation.
+                     AsyncLocalStorage is a container bound to the current
+                     async execution context - .run() a block with a
+                     value, and any code called from inside it (sync,
+                     after an await, however deep) reads the same value
+                     back with zero parameters passed. Concurrent requests
+                     each get their own isolated store automatically.
+
+How to use this folder:
+1. Go through 01 -> 03 in order - 01 is concept-only (read it, no code to
+   run); 02 and 03 are standalone Express apps you can run and hit with
+   the curl command in their header comments.
+2. practice/ has 3 exercises that recombine these concepts (adding a new
+   redacted field, correlating a background job instead of a request, and
+   comparing log level performance).
+3. Assignment 1 - Structured Logging Middleware/ assembles both code
+   topics into one app: Pino configured once in logger.js, AsyncLocalStorage
+   request context in its own module, and a simulated multi-level service
+   call chain that proves both work together. Read its README.txt for
+   what to look for in the output, then the code.

@@ -1,0 +1,76 @@
+Concurrency & Data Integrity
+=============================
+
+Q1: How do you handle two people trying to book the same ticket/seat at the same time?
+----------------------------------------------------------------------------------------
+This is a classic race condition question - the interviewer wants to see
+you spot the race, not just name a buzzword. Walk through WHY the naive
+version breaks first:
+
+  1. Request A reads: seat is available
+  2. Request B reads: seat is available   (before A has written anything)
+  3. Request A writes: seat booked by user A
+  4. Request B writes: seat booked by user B   <- overwrites A, or worse,
+     both "succeed" and you've sold one seat twice
+
+Then give the fix(es), and mention there are two real strategies:
+
+1. Pessimistic locking - lock the row for the duration of the check-and-
+   book, so the second request has to wait.
+
+   Request B's SELECT ... FOR UPDATE blocks
+   until A's transaction commits or rolls back, then B re-reads and sees
+   the seat is taken.
+
+2. A unique constraint as the last line of defense - e.g. a unique index
+   on (event_id, seat_number) in the bookings table, or on (event_id,
+   seat_number, status='confirmed'). Even if your application logic has a
+   bug, the DATABASE itself refuses the second insert. This is the
+   single most important thing to mention - constraints as a safety net
+   underneath application logic, not instead of it.
+
+
+Q2: How do you prevent double payment?
+-------------------------------------------
+1. Client-side double-submit: user double-clicks "Pay now", or their
+   network is slow and they hit retry. Fix: disable the button after the
+   first click (frontend), AND - more importantly, since you can't trust
+   the frontend - use an IDEMPOTENCY KEY. The client generates a unique
+   key per checkout attempt (a UUID), sends it in a header
+   (Idempotency-Key), and the server stores "this key already resulted in
+   order X" the first time it processes it. 
+   
+   On a retry with the same key,
+   return the SAME result instead of creating a second charge/order.
+
+2. Webhook double-delivery: payment gateways (Stripe included) don't
+   guarantee exactly-once delivery of webhook events - the same
+   "payment succeeded" event can arrive twice. Fix: make your webhook
+   handler idempotent too - before marking an order paid, check its
+   current status first (`if (order.status === "pending") { ... }`),
+   If the order's already "paid", processing
+   the same event again is a safe no-op instead of, say, queuing a second
+   confirmation email.
+
+
+Q3: What is a database transaction and when do you actually need one?
+--------------------------------------------------------------------------
+How to answer:
+A transaction groups multiple writes into one atomic unit - either ALL of
+them commit, or NONE of them do (if any step fails, everything rolls
+back).
+
+Without a transaction, a crash or error between the
+two writes leaves the data inconsistent - money vanished, or you sold
+inventory with no order to prove it and violets the ACID property
+
+Q5: What is an idempotency key and how would you implement one?
+----------------------------------------------------------------------
+It's a client-generated unique identifier for one LOGICAL operation
+(e.g. "this specific checkout attempt"), sent as a header. Server-side
+implementation: on receiving a request with an Idempotency-Key, check a
+store (a dedicated DB table/collection, or Redis with a TTL) for that
+key. If found, return the STORED response immediately without redoing
+the side effect. If not found, process the request normally, then store
+the key alongside the result (and the order/payment id it produced)
+before responding. 

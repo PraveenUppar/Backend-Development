@@ -1,0 +1,31 @@
+ORM (Prisma) 3 - Seeding
+==========================
+
+A fresh dev (or CI) database is empty. Testing pagination, a comment
+count, or a many-to-many join against zero rows hides bugs that only show
+up with real-ish data. Seeding fixes that: a script that uses the same
+Prisma Client to insert known starter data.
+
+Wiring it up (package.json):
+
+  "prisma": {
+    "seed": "node prisma/seed.js"
+  }
+
+Once configured:
+  npx prisma db seed          # runs prisma/seed.js directly
+  npx prisma migrate reset    # wipes the dev DB, re-runs all migrations,
+                                then runs the seed script automatically
+
+A seed script should be SAFE TO RE-RUN - delete existing rows first (child
+tables before parent tables, so foreign keys don't block the delete), then
+insert fresh known data. See Assignment 1 - Blog Platform/prisma/seed.js
+for a real one: it wipes comments -> postTags -> posts -> tags -> users
+(children first), then creates 3 users, 3 tags, 3 posts (linked to tags
+through the explicit PostTag join model from 01-many-to-many-relations.js),
+and 3 comments.
+
+Why order matters when deleting: Comment references Post and User, PostTag
+references Post and Tag - deleting a Post while a Comment or PostTag still
+points at it violates the foreign key constraint. Delete leaf tables
+(nothing else references them) before the tables they point to.

@@ -1,0 +1,80 @@
+Topic 4: ORM (Prisma) - Key Concepts
+======================================
+
+This assumes ..\12-prisma-orm.js is already covered - a basic
+schema.prisma with a User/Post one-to-many, CRUD through the generated
+client, `include` for pulling in a relation, known error codes (P2002
+unique violation, P2025 not found), and $transaction. This folder is the
+hands-on deep dive into what you need once your schema has more than two
+models: many-to-many with an explicit join model, the migration workflow
+across multiple schema changes, seeding, and avoiding N+1 queries on
+purpose.
+
+Needs: a Postgres database, DATABASE_URL set, and the schema in
+Assignment 1 - Blog Platform/prisma/schema.prisma migrated first
+(npx prisma migrate dev --name init, run from inside that project
+folder). The 01 and 04 files below need @prisma/client generated against
+that same schema - run them from inside the Assignment folder (or copy
+its prisma/ folder next to them) so the generated client matches.
+
+Sub-topics:
+01-many-to-many-relations   - implicit relation (Prisma-managed join
+                                table) vs an explicit join model you
+                                control yourself
+02-migrations-workflow      - running `migrate dev` across multiple
+                                schema changes over a project's life, and
+                                what happens when two developers' schema
+                                changes diverge
+03-seeding                  - prisma/seed.js + the `prisma.seed` config
+                                key, so a fresh dev database isn't empty
+04-avoiding-n-plus-one      - using select/include on the ORIGINAL query
+                                instead of looping and querying per row
+
+Why each matters (the 30-second version):
+  - Many-to-many    - IMPLICIT (both sides declared as list relations)
+                       is genuinely convenient - Prisma manages a hidden
+                       join table, and you just `connect`/`disconnect`.
+                       The catch: that hidden table can ONLY hold the two
+                       foreign keys. The moment the relationship itself
+                       needs a field (when a tag was applied, whether a
+                       follow is muted), implicit has nowhere to put it -
+                       reach for an EXPLICIT join model instead.
+  - Migrations      - a schema doesn't arrive fully formed; it grows
+                       migration by migration, and `prisma migrate dev`
+                       diffs, generates timestamped SQL, applies it, and
+                       regenerates the client every time. The migrations
+                       folder is a committed changelog, replayable with
+                       `prisma migrate deploy` in CI/production. Two
+                       developers branching schema changes off the same
+                       state can diverge - Prisma flags that like a git
+                       merge conflict rather than silently picking one.
+  - Seeding         - a fresh dev (or CI) database is empty, and testing
+                       against zero rows hides bugs that only show up
+                       with real-ish data (pagination, a comment count,
+                       a many-to-many join actually being non-empty).
+                       `npx prisma db seed` runs a script that inserts
+                       known starter data, and `migrate reset` runs it
+                       automatically after wiping the DB.
+  - N+1 queries     - fetch a list, then loop making one more query per
+                       item, and 10 rows becomes 11 queries - worse as
+                       data grows. `select`/`include` on the ORIGINAL
+                       query fetch relations as part of the same (or one
+                       small batched) round trip. Rule of thumb: if
+                       you're writing a loop around an `await
+                       prisma.something.findX()` call, a select/include
+                       on the original query probably already has it.
+
+How to use this folder:
+1. Go through 01 -> 04 in order. 01 and 04 are runnable Express apps
+   (run them from inside the Assignment folder so the Prisma client
+   matches its schema); 02 and 03 are workflow notes with the actual
+   commands - read them, then look at the Assignment's prisma/ folder to
+   see them applied.
+2. practice/ has exercises that recombine these concepts (adding a new
+   explicit-join relation, writing a second migration by hand, and
+   fixing an N+1 query someone else wrote).
+3. Assignment 1 - Blog Platform/ assembles all of it: Post<->Tag as an
+   explicit join model (PostTag, with a taggedAt field), a schema written
+   as it would land across multiple migrations, prisma/seed.js, and
+   N+1-safe reads on every list/detail endpoint. Read its README.txt for
+   the brief, then the code.

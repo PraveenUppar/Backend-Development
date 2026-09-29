@@ -1,0 +1,29 @@
+Scaling & Architecture
+========================
+
+Q1: What is a reverse proxy, and how is it useful in backend development?
+--------------------------------------------------------------------------------
+A reverse proxy sits IN FRONT of your application server(s) and forwards
+client requests to them, then returns the response back to the client -
+the client only ever talks to the proxy, never directly to your app
+server. 
+
+Concrete things a reverse proxy (nginx, Caddy, or a cloud load balancer)
+gives you that you don't want to build into your Node app itself:
+- Load balancing across multiple instances of your app (round robin,
+  least-connections) - this is also how you SCALE a Node app
+  horizontally, since Node is single-threaded per process.
+- Hiding your internal architecture - clients only see one public
+  endpoint even if you have 10 services behind it.
+
+
+
+Q2: What is the CAP theorem, and why does it matter for distributed data stores?
+---------------------------------------------------------------------------------------
+CAP theorem: in a distributed system, when a network partition happens
+(nodes can't talk to each other), you must choose between Consistency
+(every node sees the same data) and Availability (every request gets a
+response, even if it might be stale) - you can't have both DURING the
+partition. (Partition tolerance itself isn't really optional in a real
+distributed system, so in practice this is a C-vs-A trade-off under
+partition.)

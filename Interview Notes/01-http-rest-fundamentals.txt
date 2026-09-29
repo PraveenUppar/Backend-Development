@@ -1,0 +1,53 @@
+HTTP & REST Fundamentals
+=========================
+
+Q1: Can you describe a typical HTTP request/response cycle?
+-------------------------------------------------------------
+1. Client resolves the domain to an IP (DNS), opens a TCP connection
+   (TLS handshake too, if HTTPS).
+2. Client sends an HTTP request: a method (GET/POST/...), a path, headers
+   (Host, Authorization, Content-Type...), and optionally a body.
+3. The request hits your server - in Express, it flows through the
+   middleware stack in order (parsers, auth, your route handler)
+4. Your route handler does its work (maybe a DB query) and calls
+   res.json()/res.send(), which sets a status code, headers, and body.
+5. The response travels back over the same connection (or a pooled/
+   reused one with keep-alive), and the client parses status + headers
+   + body.
+6. The connection is either closed or kept alive for the next request.
+
+Q2: What is a RESTful API, and what are its core principles?
+----------------------------------------------------------------
+- Resources: URLs name things (/orders/42), not verbs
+  (/getOrder?id=42). The HTTP method (GET/POST/PATCH/DELETE) is the verb.
+- Statelessness: each request carries everything needed to understand it
+  (auth token, params) - the server keeps no per-client session state
+  between requests.
+- Uniform interface: the same HTTP methods and status codes mean the same
+  thing everywhere in your API.
+- Client-server separation: frontend and backend evolve independently as
+  long as the contract (the API shape) holds.
+
+Q3: What's the difference between PUT and PATCH?
+---------------------------------------------------
+PUT replaces the ENTIRE resource - if you omit a field, a strict PUT
+implementation would clear it. PATCH applies a PARTIAL update - only the
+fields you send change. 
+
+Q4: What is idempotency in the context of HTTP methods, and why does it matter?
+------------------------------------------------------------------------------
+An operation is idempotent if doing it once has the same end result as
+doing it N times. GET, PUT, DELETE are idempotent by spec; POST is not.
+
+This matters in practice because networks are unreliable - a client might
+time out waiting for a response and RETRY a request that actually
+succeeded on the server. If that request was "charge this card $50" and
+it's not idempotent, a retry double-charges the customer.
+
+The fix in real systems: idempotency keys - the client generates a unique
+key per logical operation (e.g. per checkout attempt) and sends it in a
+header; the server stores "this key already produced this result" and
+returns the SAME response on a retry instead of repeating the side
+effect. This is the direct mechanism behind "how do you prevent double
+payment"
+

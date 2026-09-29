@@ -1,0 +1,50 @@
+Caching & Performance
+======================
+
+Q1: Can you describe a distributed caching strategy for a high-availability application?
+---------------------------------------------------------------------------------------------
+Start from WHY it's "distributed": if you cache in the Node process's own
+memory (a plain JS object), that cache is useless the moment you run more
+than one server instance - each instance has its own cache, so a write on
+instance A doesn't invalidate the stale copy sitting in instance B's
+memory, and users get inconsistent results depending which instance they
+hit. 
+
+A distributed cache (Redis, Memcached) lives OUTSIDE any single app
+instance, so all instances share one source of cached truth
+
+Then describe the actual pattern (cache-aside, the most common one):
+1. On read: check the cache first; on a hit, return it; on a miss, query
+   the real DB, then WRITE the result to the cache with a TTL before
+   returning it.
+2. On write (create/update/delete): invalidate (delete) the relevant
+   cache key(s) so the next read recomputes fresh data 
+
+
+Q2: Discuss the implementation of rate limiting to protect APIs from abuse.
+------------------------------------------------------------------------------------
+Explain the goal first: stop a single client (malicious or just buggy)
+from sending so many requests that they degrade service for everyone
+else, or from brute-forcing something (login attempts, coupon codes).
+
+Then describe the mechanism - token bucket / sliding window are the two
+worth naming:
+- Token bucket: each client has a "bucket" of tokens that refills at a
+  fixed rate; each request consumes one token; if the bucket's empty,
+  the request is rejected (429 Too Many Requests) until it refills. This
+  allows bursts up to the bucket size while capping the average rate.
+- Fixed/sliding window: count requests in a time window (e.g. max 100
+  per minute) per client key (IP, user id, or API key).
+
+Q3: How would you approach batch processing in a data-heavy backend application?
+--------------------------------------------------------------------------------------
+batch jobs process a large volume of data on a
+schedule or trigger, outside the request cycle, typically where a user
+isn't waiting synchronously for the result (nightly reports, re-indexing
+search, sending a bulk email campaign, recalculating analytics).
+
+Key practices to mention:
+- Don't load everything into memory at once - process in CHUNKS/pages
+- Make each chunk idempotent/resumable 
+- Log progress and failures per chunk, so a partial failure is visible
+  and debuggable rather than a silent gap in the data.

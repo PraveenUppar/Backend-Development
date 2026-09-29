@@ -1,0 +1,55 @@
+Security
+=========
+
+Q1: How do you protect a server from SQL injection attacks?
+----------------------------------------------------------------
+Explain the vulnerability first, briefly: if you build a query by string
+concatenation (`"SELECT * FROM users WHERE email = '" + input + "'"`), an
+attacker can send input like `' OR '1'='1` and change the query's logic
+entirely, or `'; DROP TABLE users; --` to run a second statement.
+
+Then give the fix, concretely: ALWAYS use parameterized queries -
+placeholders ($1, $2 in pg, ? in mysql2) where the driver sends the query
+and the values SEPARATELY,
+
+Mention the ORM angle too: an ORM removes the chance of a developer forgetting to
+parameterize. 
+
+Q2: How do you securely store passwords?
+--------------------------------------------
+Never store plaintext, and never use a fast general-purpose hash like
+MD5/SHA-256 alone - they're too fast, making brute-force/rainbow-table
+attacks cheap. Use a slow, purpose-built password hashing algorithm with
+a built-in salt: bcrypt . bcrypt.hash(password, 10) does the salting and hashing in one
+call
+
+
+Q4: How do you prevent XSS and CSRF in an API-driven application?
+-----------------------------------------------------------------------
+How to answer:
+XSS (Cross-Site Scripting): an attacker gets malicious JS to run in
+another user's browser, usually by injecting it into content that gets
+rendered unescaped. For a pure JSON API, your main defense is that you
+never render user input as HTML server-side - the frontend framework
+(React etc.) escapes it by default. Still validate/sanitize input at the
+API boundary, and set a Content-Security-Policy header if you serve any
+HTML/uploaded content 
+
+CSRF (Cross-Site Request Forgery): a malicious site tricks a logged-in
+user's browser into making a request to your API using their existing
+session cookie. This mainly matters for COOKIE-based auth. Token-based
+auth because a malicious site can't read your JWT out of localStorage 
+
+Q5: What is CORS and why does it matter?
+----------------------------------------------
+CORS (Cross-Origin Resource Sharing) is a BROWSER security mechanism, not
+a server one - by default, a browser blocks JS on siteA.com from reading
+responses from api.siteB.com unless siteB's server explicitly allows it
+via response headers (Access-Control-Allow-Origin, etc.). 
+
+It exists to stop a malicious site from silently reading data from another site's API
+using the victim's cookies.
+
+Note: CORS doesn't
+protect your API from non-browser clients (curl, another server) at
+all - it's purely a browser-enforced rule, 

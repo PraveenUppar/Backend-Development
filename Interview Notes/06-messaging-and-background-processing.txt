@@ -1,0 +1,63 @@
+Messaging, Queues & Background Processing
+============================================
+
+Q1: Can you explain the use and benefits of a message queue in a distributed system?
+--------------------------------------------------------------------------------------
+A queue decouples the PRODUCER of work from the CONSUMER of work in time
+and in failure domain. Instead of your API handler directly doing slow
+work (sending an email, resizing an image, calling a flaky third-party
+API), it just drops a small message onto a queue and responds to the
+user immediately; a separate worker process picks up messages and does
+the actual work whenever it can.
+
+Benefits to name concretely:
+- Faster responses: 
+- Resilience/retries: the queue can retry the job automatically with backoff
+- Independent scaling: you can run more WORKER processes to drain the
+  queue faster without touching the API servers at all.
+
+
+Q2: What are webhooks and how have you implemented them in past projects?
+--------------------------------------------------------------------------------
+A webhook is the REVERSE of a normal API call: instead of you polling a
+third party asking "did anything happen yet?", the third party calls
+YOUR server the moment something happens (Stripe: payment succeeded;
+GitHub: a push happened; Twilio: an SMS was delivered).
+
+Walk through the concrete implementation details, since this is where
+real experience shows:
+- The route needs the RAW request body (not JSON-parsed) to verify the
+  sender's signature - `express.raw({ type: "application/json" })`
+  registered BEFORE `express.json()` globally, 
+- ALWAYS verify the signature (`stripe.webhooks.constructEvent(...)`)
+  before trusting the payload - anyone can POST to a public webhook URL
+  pretending to be Stripe if you skip this.
+- Respond fast (2xx) and do slow follow-up work via a queue, not inline -
+  Stripe retries with backoff if you don't acknowledge quickly, and you
+  don't want retries piling up because your handler is slow.
+- Handle DUPLICATE delivery - webhook providers guarantee at-least-once
+  delivery, not exactly-once, so check the current state before applying
+  a change (`if (order.status === "pending")` in the capstone's webhook
+  handler) so processing the same event twice is a safe no-op.
+
+
+Q4: What's the difference between a queue and a pub/sub system?
+------------------------------------------------------------------------
+A queue (BullMQ, SQS): each message is delivered to and processed by
+exactly ONE consumer - if you have 5 workers pulling from the same
+queue, a given job goes to only one of them (this is how you scale
+throughput - add more workers, they compete for jobs). It's for
+"distribute this work across whoever's available."
+
+Pub/sub (Redis pub/sub, SNS, Kafka topics in a fan-out setup): a message
+published to a topic/channel is delivered to EVERY subscriber
+independently - it's for "notify everyone interested that this
+happened," not for load-distributing a single unit of work. A real-time
+chat broadcast (14-websockets-socketio.js's `io.to(room).emit(...)`) is
+conceptually pub/sub - every socket in the room gets the message, none
+of them "consume" it on behalf of the others.
+
+Some systems (Kafka) can do both depending on configuration (consumer
+groups vs each consumer getting every message) - worth mentioning if the
+interview goes deep, but the queue-vs-pubsub distinction above is the
+core thing being tested.

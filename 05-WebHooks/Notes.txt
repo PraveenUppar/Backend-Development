@@ -1,0 +1,88 @@
+Topic 5: Webhooks - Key Concepts
+==================================
+
+Unlike the other topics, there's no flat "13-webhooks.js" file at the
+Backend root to build on - the only existing webhook code before this
+folder is Capstone Project/webhooks/stripe.webhook.js, which RECEIVES and
+verifies events Stripe sends using Stripe's own verification helper
+(stripe.webhooks.constructEvent). That's one side of webhooks, and it
+uses a library to do the hard part for you.
+
+This folder is about webhooks as a PATTERN you can implement yourself
+with nothing but Node's built-in `crypto` module - both the SENDING side
+(a service notifying subscribers of events) and the RECEIVING side
+(verifying, deduplicating, trusting what arrives). Understanding this is
+what makes Stripe's version make sense instead of feeling like magic.
+
+What is a webhook, really? It's just: "when X happens on my server, I'll
+POST a JSON payload to a URL you gave me." It inverts the usual
+client-polls-server model - instead of asking "did anything happen yet?"
+repeatedly, the sender pushes the moment something happens. The hard
+parts aren't the HTTP POST itself - they're proving the payload actually
+came from who it claims to, making sure an old captured payload can't be
+replayed later, handling the sender's retries without processing the
+same event twice, and the sender handling its own delivery failures
+gracefully.
+
+Sub-topics:
+01-hmac-signing               - proving a payload wasn't tampered with,
+                                  using a shared secret and a
+                                  timing-safe comparison
+02-replay-protection           - a valid signature only proves the
+                                  payload wasn't altered, not that it's
+                                  fresh - timestamps fix that
+03-idempotency-receiver         - webhook delivery is "at least once",
+                                  not "exactly once" - dedupe by event id
+                                  so a retried delivery isn't processed twice
+04-delivery-retries-backoff     - the SENDER side: retry failed
+                                  deliveries with exponential backoff
+                                  instead of giving up or hammering a
+                                  struggling receiver
+
+Why each matters (the 30-second version):
+  - HMAC signing   - anyone can POST JSON to your receiver URL pretending
+                     to be the real sender. Sender and receiver share a
+                     secret; the sender hashes the payload WITH that
+                     secret, the receiver recomputes and compares. An
+                     attacker without the secret can't produce a matching
+                     signature, even for one altered byte. Always compare
+                     with crypto.timingSafeEqual, never `===` - string
+                     equality short-circuits on the first mismatch, which
+                     leaks timing information an attacker could use to
+                     guess the signature byte by byte.
+  - Replay
+    protection     - a captured, genuinely-signed request replayed later
+                     still passes signature verification, since nothing
+                     about a signature depends on time. Fix: sign a
+                     timestamp AS PART OF the payload (not alongside,
+                     unsigned - otherwise an attacker swaps in a fresh
+                     one) and reject anything older than a window
+                     (Stripe uses 5 minutes).
+  - Idempotency    - if the sender doesn't get a clean 2xx back, it
+                     retries - so the same event can arrive twice. If
+                     that event triggers "charge the customer's card,"
+                     processing it twice is a real bug. Give every event
+                     a unique id, track which ids you've processed, and
+                     acknowledge (still 2xx) but skip re-doing the work
+                     for one you've already seen.
+  - Delivery
+    retries        - the receiver might be down for a few seconds, or
+                     500, or time out. Giving up after one attempt loses
+                     events; retrying in a tight loop can hammer a
+                     struggling receiver. Exponential backoff (2s, 4s,
+                     8s...) is the middle ground - same idea as BullMQ's
+                     `backoff: { type: "exponential" }` from
+                     ../03-Background-Jobs, implemented by hand here since
+                     this doesn't use a queue library.
+
+How to use this folder:
+1. Go through 01 -> 04 in order - each file is a standalone Express app
+   you can run and hit with the curl command in its header comment.
+2. practice/ has 3 exercises that recombine these concepts (signing a
+   different payload shape, tightening the replay window, and building a
+   persistent-across-restarts idempotency store).
+3. Assignment 1 - Webhook Dispatcher/ assembles all four into a real
+   two-process system: a dispatcher (sender) and a receiver (subscriber),
+   running as separate apps that actually talk to each other over HTTP.
+   Read its README.txt for how to run both and see the full flow,
+   including the invalid-signature and replay-rejection paths.

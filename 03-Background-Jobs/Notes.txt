@@ -1,0 +1,76 @@
+Topic 3: Background Jobs - Key Concepts
+=========================================
+
+This assumes ..\11-background-jobs.js is already covered - node-cron for
+scheduled tasks, a basic Queue + Worker pair, enqueueing a job instead of
+doing work inline, and retrying a failed job with `attempts` + exponential
+`backoff`. None of that is repeated here. This folder is the hands-on deep
+dive into what you need once a queue is running in production and someone
+asks "how far along is job #482": progress tracking, BullMQ's own repeat
+option, inspecting failed jobs, priorities, and concurrency.
+
+Needs: Redis running for every file here -
+  docker run -d -p 6379:6379 redis
+
+The running example is a Report Generator Queue - the same job (a
+multi-stage report build) gets progress tracking, a companion repeatable
+cleanup job, deliberate failures to inspect, priority, and concurrency
+demonstrated one at a time across topics 1-5, then assembled for the
+assignment.
+
+Sub-topics:
+01-job-progress-tracking      - job.updateProgress() so a long job isn't
+                                  indistinguishable from a frozen one
+02-repeatable-jobs            - BullMQ's `repeat` option: schedule lives
+                                  in Redis, exactly one worker across your
+                                  fleet picks up each run
+03-failed-jobs-dead-letter    - there's no separate dead-letter queue -
+                                  exhausted jobs sit in the same queue's
+                                  "failed" set until you inspect/clean them
+04-job-priority                - lower number = higher priority (like
+                                  process nice values), and what it does
+                                  and doesn't affect
+05-concurrency                 - how many jobs one Worker processes at
+                                  once, and when raising it helps vs does
+                                  nothing
+
+Why each matters (the 30-second version):
+  - Progress
+    tracking      - a job that takes 10 seconds looks the same as a
+                     frozen job from the outside unless it reports
+                     progress. Any multi-stage job should report it so a
+                     frontend can show real progress instead of a spinner
+                     that never changes.
+  - Repeatable
+    jobs          - node-cron runs inside your process, on your process's
+                     clock, with no persistence - run 3 instances of your
+                     API and the cron job runs 3 times. BullMQ's `repeat`
+                     stores the schedule IN Redis so only one worker
+                     across the whole fleet picks up each scheduled run.
+  - Failed jobs   - coming from SQS/RabbitMQ you might expect a distinct
+                     dead-letter queue. BullMQ doesn't have one - a job
+                     that exhausts its `attempts` stays in the SAME
+                     queue's "failed" set with its failedReason recorded,
+                     until something explicitly cleans it up.
+  - Job priority  - lower number wins (1 beats 10) - it trips people up
+                     because it's the opposite of "priority 10 is more
+                     important." Only affects ordering among WAITING
+                     jobs; doesn't preempt one already processing.
+  - Concurrency   - a Worker processes ONE job at a time by default. For
+                     I/O-bound jobs (an API call, a DB query) that wastes
+                     the wait time - `concurrency` lets one Worker pull
+                     several jobs in parallel via the event loop. Doesn't
+                     help CPU-bound work; that needs multiple Worker
+                     processes instead.
+
+How to use this folder:
+1. Go through 01 -> 05 in order - each file is a standalone Express app
+   with its own Queue/Worker you can run against a local Redis and hit
+   with the curl command in its header comment.
+2. practice/ has 3 exercises that recombine these concepts on new
+   scenarios (a priority-aware encoding queue, a repeatable job running
+   alongside concurrent ad-hoc jobs, and a retryable failed-email queue).
+3. Assignment 1 - Report Generator Queue/ assembles it into one service:
+   report generation with progress, a repeatable cleanup job, and a
+   deliberately failing job to inspect. Read its README.txt for the
+   brief, then the code.

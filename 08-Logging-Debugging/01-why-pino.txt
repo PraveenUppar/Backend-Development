@@ -1,0 +1,38 @@
+Logging & Debugging 1 - Why a Real Library, and Why Pino
+============================================================
+
+../16-logging-and-debugging.js already covers morgan for HTTP request
+logs, a hand-rolled `logger` object with info/warn/error that prints
+JSON, a request counter tagging log lines with a requestId, and a
+debugging checklist. This picks up where that one stops.
+
+Why a real library instead of the hand-rolled object
+--------------------------------------------------------
+The hand-rolled logger works, but every one of these is a real limitation
+that shows up the moment the app is under load or someone else is on call
+at 3am:
+
+- No runtime-configurable level. You can't turn off "info" spam in prod
+  without editing code and redeploying.
+- No redaction. logger.info("login attempt", req.body) with a password
+  field in req.body puts that password in your log aggregator forever -
+  you're trusting every call site to remember to strip sensitive fields.
+- No performance story. JSON.stringify + console.log on every call adds
+  up under real traffic. Pino defers string building and generates fast
+  JSON serializers from your log shape specifically to avoid this.
+- No pretty output for local dev, no transport system, without building
+  it yourself.
+
+Why Pino over Winston
+------------------------
+Both are legitimate and widely used. Pino is JSON-first and
+near-zero-overhead by design - it does the minimum work in the main
+thread and can push formatting/transport work to a worker thread
+(pino-pretty, file transports run off the critical path). Winston is more
+"batteries included" (multiple simultaneous transports, a fluent format
+API) but that flexibility costs throughput, since it does more formatting
+work synchronously in-process by default. For a typical Express API
+shipping structured JSON to Datadog/CloudWatch/ELK, Pino's opinionated
+"just emit JSON, fast" model is usually the better fit.
+
+See 02-pino-core-api-redaction.js for what using it actually looks like.
