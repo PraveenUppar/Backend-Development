@@ -26,8 +26,8 @@ const prisma = new PrismaClient();
 //
 // IMPLICIT - declare both sides as list relations, Prisma manages a hidden
 // join table for you:
-//   model Post { id Int @id  tags Tag[] }
-//   model Tag  { id Int @id  posts Post[] }
+// model Post { id Int @id  tags Tag[] }
+// model Tag  { id Int @id  posts Post[] }
 // Genuinely convenient - prisma.post.update({ data: { tags: { connect: [...] } } })
 // and Prisma handles the join row. The catch: you never touch that join
 // table directly, so it can ONLY hold the two foreign keys. The moment you
@@ -37,14 +37,14 @@ const prisma = new PrismaClient();
 //
 // EXPLICIT - model the join table yourself (see
 // Assignment 1 - Blog Platform/prisma/schema.prisma):
-//   model PostTag {
-//     postId   Int
-//     tagId    Int
-//     taggedAt DateTime @default(now())   // extra data ABOUT the relationship
-//     post Post @relation(fields: [postId], references: [id])
-//     tag  Tag  @relation(fields: [tagId], references: [id])
-//     @@id([postId, tagId])
-//   }
+// model PostTag {
+//   postId   Int
+//   tagId    Int
+//   taggedAt DateTime @default(now())   // extra data ABOUT the relationship
+//   post Post @relation(fields: [postId], references: [id])
+//   tag  Tag  @relation(fields: [tagId], references: [id])
+//   @@id([postId, tagId])
+// }
 // Now `taggedAt` lives naturally on the relationship. Querying it is one
 // extra hop (post.tags[].tag.name instead of post.tags[].name) but you get
 // full control - filter/sort by taggedAt, delete a specific pairing without
@@ -62,7 +62,11 @@ app.post("/posts", async (req, res) => {
 
     for (const name of tagNames) {
       // upsert: create the Tag if it doesn't exist yet, otherwise use the existing one
-      const tag = await tx.tag.upsert({ where: { name }, update: {}, create: { name } });
+      const tag = await tx.tag.upsert({
+        where: { name },
+        update: {},
+        create: { name },
+      });
       await tx.postTag.create({ data: { postId: created.id, tagId: tag.id } });
     }
 
@@ -73,4 +77,8 @@ app.post("/posts", async (req, res) => {
 });
 
 const PORT = 4411;
-app.listen(PORT, () => console.log(`Many-to-many relations demo running on http://localhost:${PORT}`));
+app.listen(PORT, () =>
+  console.log(
+    `Many-to-many relations demo running on http://localhost:${PORT}`,
+  ),
+);
